@@ -21,8 +21,8 @@
             <form>
               <div class="form-group">
                 <label>Application name</label>
-                <input type="text" class="form-control" placeholder="Enter app name">
-                <small id="emailHelp" class="form-text text-muted" v-model="application.name">A folder will be created with this application name</small>
+                <input type="text" class="form-control" placeholder="Enter app name" v-model="application.name">
+                <small id="emailHelp" class="form-text text-muted">A folder will be created with this application name</small>
               </div>
 
               <button v-on:click="setDirectory($event)">Select directory</button>
@@ -90,22 +90,33 @@
 
 <script>
   import Yaml from 'json2yaml'
+  import { exec } from 'child_process'
   const fs = require('fs')
   const {dialog} = require('electron').remote
+  const path = require('path')
 
   export default {
     name: 'landing-page',
     data: function () {
       return {
         application: {
-          name: null,
+          name: '',
           install_redis: false,
           install_socket: false,
           install_mysql: false,
           laravel_version: null,
           directory: null
         },
-        show_spinner: false
+        services: {},
+        dockerCompose: {
+          version: '3',
+          services: {},
+          volumes: {}
+        },
+        dockerComposeYaml: '',
+        show_spinner: false,
+        appName: '',
+        appDir: ''
       }
     },
     methods: {
@@ -114,38 +125,57 @@
         console.log(this.application)
       },
       createApplication () {
-        this.show_spinner = true
-        // Lets generate the yaml file based on the user config
-        let ymlText = Yaml.stringify({
-          version: '3',
-          services: {
-            php: {
-              build: {
-                context: './docker/php',
-                dockerfile: 'Dockerfile'
-              },
-              image: this.application.name + '/php',
-              volumes: [
-                '.:/var/www/html'
-              ],
-              container_name: this.application.name + '-php'
-            },
-            nginx: {
-              build: {
-                context: './docker/nginx',
-                dockerfile: 'Dockerfile'
-              },
-              image: this.application.name + '/nginx',
-              volumes: [
-                '.:/var/www/html'
-              ],
-              container_name: this.application.name + '-nginx'
-            }
-          }
-        })
+        let self = this
 
-        fs.writeFile(this.application.directory + '/docker-compose.yaml', ymlText)
-        console.log(ymlText)
+        this.show_spinner = true
+
+        this.appName = this.application.name.replace(' ', '').toLowerCase()
+
+        this.appDir = path.join(this.application.directory[0], this.appName)
+
+        // Create the directory
+        if (!fs.existsSync(this.appDir)) {
+          fs.mkdirSync(this.appDir)
+        }
+
+        // Install the selected laravel app in the selected folder
+        exec(`cd ${this.appDir} && docker run --rm -v ${this.application.directory}:/app -w="/app" deferdie/php composer create-project --prefer-dist laravel/laravel ./${this.appName} "${this.application.laravel_version}.*"`, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`exec error: ${error}`)
+            return
+          }
+
+          // Setup docker, and other ci devops stuff
+          self.setUpCiFolder()
+
+          // Add Nginx service
+          self.setServiceNginx()
+
+          // Add PHP Service
+          self.setServicePHP()
+
+          // Add MySql
+          if (self.application.install_mysql) {
+            self.setServiceMySQL()
+          }
+
+          // Add Redis
+          if (self.application.install_redis) {
+            self.setServiceRedis()
+          }
+
+          console.log(this.services)
+
+          // Generate the docker-compose file
+          self.generateDockerComposeYaml()
+
+          // Save the docker-compose generated file
+          self.writeDockerComposeYaml()
+
+          console.log(`stdout: ${stdout}`)
+          console.log(`stderr: ${stderr}`)
+          self.show_spinner = false
+        })
       },
       setDirectory (e) {
         let path = dialog.showOpenDialog({
@@ -153,6 +183,145 @@
         })
 
         this.application.directory = path
+      },
+      generateDockerComposeYaml () {
+        this.dockerComposeYaml = Yaml.stringify(this.dockerCompose)
+      },
+      writeDockerComposeYaml () {
+        // Add the docker-compose file
+        fs.writeFile(this.appDir + '/docker-compose.yaml', this.dockerComposeYaml)
+      },
+      /**
+       * Set up the Nginx service with folders
+       */
+      setServiceNginx () {
+        let self = this
+
+        // Create the Nginx folder
+        fs.mkdirSync(this.appDir + '/ci/docker/nginx')
+
+        // The nginx service
+        let nginxService = {
+          build: {
+            context: '.',
+            dockerfile: './ci/docker/nginx/Dockerfile'
+          },
+          ports: ['80:80'],
+          image: this.appName + '/nginx',
+          volumes: [
+            '.:/var/www/html'
+          ],
+          container_name: this.appName + '-nginx'
+        }
+
+        this.dockerCompose.services['nginx'] = nginxService
+
+        // Add the default.conf file to the Nginx folder
+        fs.readFile(path.join(__dirname, '../../', 'templates', 'default.conf'), 'utf8', function (err, contents) {
+          // Lets update the replace container name with the nginx container name
+          let updatedNginxConfFile = contents.replace('CONTAINER_NAME', self.appName + '-php')
+
+          // Lets write a new file based on the new contents
+          fs.writeFile(self.appDir + '/ci/docker/nginx/default.conf', updatedNginxConfFile)
+
+          if (err) {
+            console.log(err)
+          }
+        })
+
+        // Copy the Nginx docker file
+        fs.copyFile(path.join(__dirname, '../../', 'templates', 'NginxDockerFile'), this.appDir + '/ci/docker/nginx/Dockerfile', (err) => {
+          if (err) {
+            console.log(err)
+          }
+        })
+      },
+      /**
+       * Set up the php service with folders
+       */
+      setServicePHP () {
+        // Create the Php folder
+        fs.mkdirSync(this.appDir + '/ci/docker/php')
+
+        let phpService = {
+          build: {
+            context: '.',
+            dockerfile: './ci/docker/php/Dockerfile'
+          },
+          image: this.appName + '/php',
+          volumes: [
+            '.:/var/www/html'
+          ],
+          container_name: this.appName + '-php'
+        }
+
+        // Copy the Nginx docker file
+        fs.copyFile(path.join(__dirname, '../../', 'templates', 'PhpDockerFile'), this.appDir + '/ci/docker/php/Dockerfile', (err) => {
+          if (err) {
+            console.log(err)
+          }
+        })
+
+        fs.copyFile(path.join(__dirname, '../../', 'templates', 'www.conf'), this.appDir + '/ci/docker/php/www.conf', (err) => {
+          if (err) {
+            console.log(err)
+          }
+        })
+
+        fs.copyFile(path.join(__dirname, '../../', 'templates', 'php-fpm.conf'), this.appDir + '/ci/docker/php/php-fpm.conf', (err) => {
+          if (err) {
+            console.log(err)
+          }
+        })
+
+        this.dockerCompose.services['php'] = phpService
+      },
+      /**
+       * Set up the mysql service
+       */
+      setServiceMySQL () {
+        let mysqlService = {
+          image: 'mysql:5.7',
+          ports: ['3306:3306'],
+          environment: {
+            MYSQL_ROOT_PASSWORD: 'secret',
+            MYSQL_DATABASE: this.appName,
+            MYSQL_USER: 'root',
+            MYSQL_PASSWORD: 'secret'
+          },
+          volumes: [
+            'mysqldata:/var/lib/mysql'
+          ],
+          container_name: this.appName + '-mysql'
+        }
+
+        this.dockerCompose.volumes['mysqldata'] = {driver: 'local'}
+
+        this.dockerCompose.services['mysql'] = mysqlService
+      },
+      /**
+       * Set up the REDIS service
+       */
+      setServiceRedis () {
+        let redisService = {
+          image: 'redis:alpine',
+          ports: ['6379:6379'],
+          volumes: [
+            'redisdata:/data'
+          ],
+          container_name: this.appName + '-redis'
+        }
+
+        this.dockerCompose.volumes['redisdata'] = {driver: 'local'}
+
+        this.dockerCompose.services['redis'] = redisService
+      },
+      /**
+       * Create ci folders
+       */
+      setUpCiFolder () {
+        fs.mkdirSync(this.appDir + '/ci')
+        fs.mkdirSync(this.appDir + '/ci/docker')
       }
     }
   }

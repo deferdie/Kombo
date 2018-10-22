@@ -1,0 +1,15 @@
+FROM deferdie/nginx:latest
+
+WORKDIR /var/www/html
+
+# Copy the application
+COPY . .
+
+# Copy the nginx server donfig
+COPY ./ci/docker/nginx/default.conf /etc/nginx/conf.d
+
+# Expose port 80 to access the container
+EXPOSE 80
+
+# Run Nginx
+CMD [ "nginx" ]

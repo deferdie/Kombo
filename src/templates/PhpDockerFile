@@ -1,0 +1,18 @@
+FROM deferdie/php:7.1
+
+WORKDIR /var/www/html
+
+# Copy the application
+COPY . .
+
+COPY ./ci/docker/php/php-fpm.conf /etc/php7/
+COPY ./ci/docker/php/www.conf /etc/php7/php-fpm.d/
+
+RUN composer install
+
+# Update permissionss
+RUN chmod -R 777 /var/www/html/storage
+
+EXPOSE 9000
+
+CMD [ "php-fpm7", "-F" ]

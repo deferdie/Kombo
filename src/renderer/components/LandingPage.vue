@@ -4,10 +4,44 @@
       <h1 class="h2">Applications</h1>
     </div>
     <div class="col text-right">
-      <button class="btn btn-sm btn-outline-success" data-toggle="modal" data-target="#exampleModalCenter">Add application</button>
+      <button class="btn btn-sm btn-outline-success" data-toggle="modal" data-target="#exampleModalCenter">Add new application</button>
+      <button class="btn btn-sm btn-outline-success" data-toggle="modal" data-target="#existingAppModal">Add existing application</button>
     </div>
 
     <!-- Modal -->
+    <div class="modal fade" id="existingAppModal" tabindex="-1" role="dialog" aria-labelledby="existingAppModal" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLongTitle">Add your existing application</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <form>
+              <div class="form-group">
+                <label>Application name</label>
+                <input type="text" class="form-control" placeholder="Enter app name" v-model="application.name">
+                <small id="emailHelp" class="form-text text-muted">A folder will be created with this application name</small>
+              </div>
+
+              <div class="form-group">
+                <button v-on:click="setDirectory($event)" class="btn btn-primary">Select directory</button>
+                <small v-if="application.directory">{{application.directory[0]}}</small>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-warning" data-dismiss="modal" v-if="!show_spinner">Close</button>
+            <button type="button" class="btn btn-primary" v-on:click="existingApplication()">
+              <span v-if="!show_spinner">Add application</span>
+              <i v-else class="fa fa-spinner fa-spin" style="font-size:24px"></i>              
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="modal fade" id="exampleModalCenter" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">
       <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -87,6 +121,42 @@
         </div>
       </div>
     </div>
+
+    <!-- Applications -->
+    <table class="table table-striped table-hover">
+      <thead>
+        <tr>
+          <td>
+            Application Name
+          </td>
+          <td>
+            Containers
+          </td>
+          <td>
+            Rnning containers
+          </td>
+          <td>
+            Commands
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="application in applications">
+          <td>
+            {{application.name}}
+          </td>
+          <td>
+            4
+          </td>
+          <td>
+            4/5
+          </td>
+          <td>
+            commands here
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </template>
 
@@ -96,6 +166,9 @@
   const fs = require('fs')
   const {dialog} = require('electron').remote
   const path = require('path')
+  const sqlite3 = require('sqlite3')
+  const os = require('os')
+  const db = new sqlite3.Database(path.join(os.homedir(), '.kombo', 'kombo'))
 
   export default {
     name: 'landing-page',
@@ -118,8 +191,17 @@
         dockerComposeYaml: '',
         show_spinner: false,
         appName: '',
-        appDir: ''
+        appDir: '',
+        applications: []
       }
+    },
+    created () {
+      let self = this
+
+      db.each('SELECT * from applications', function (err, app) {
+        if (err) console.log(err)
+        self.applications.push(app)
+      })
     },
     methods: {
       updateForm (formItem, value) {
@@ -328,6 +410,9 @@
       setUpCiFolder () {
         fs.mkdirSync(this.appDir + '/ci')
         fs.mkdirSync(this.appDir + '/ci/docker')
+      },
+      existingApplication () {
+        db.run('INSERT INTO applications VALUES (?, ?)', [this.application.name, this.application.path])
       }
     }
   }

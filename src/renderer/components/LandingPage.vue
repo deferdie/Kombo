@@ -25,9 +25,11 @@
                 <small id="emailHelp" class="form-text text-muted">A folder will be created with this application name</small>
               </div>
 
-              <button v-on:click="setDirectory($event)">Select directory</button>
-              <br>
-
+              <div class="form-group">
+                <button v-on:click="setDirectory($event)" class="btn btn-primary">Select directory</button>
+                <small v-if="application.directory">{{application.directory[0]}}</small>
+              </div>
+              
               <div class="input-group mb-3">
                 <div class="input-group-prepend">
                   <label class="input-group-text" for="inputGroupSelect01">Laravel version</label>
@@ -62,7 +64,7 @@
                   <input type="radio" /> Yes
                 </label>
               </div>
-              <p>
+              <!-- <p>
                 SocketIO?
               </p>
               <div class="btn-group btn-group-toggle" data-toggle="buttons">
@@ -72,7 +74,7 @@
                 <label class="btn btn-secondary" v-on:click="updateForm('install_socket', true)">
                   <input type="radio" /> Yes
                 </label>
-              </div>
+              </div> -->
             </form>
           </div>
           <div class="modal-footer">
@@ -126,6 +128,10 @@
       },
       createApplication () {
         let self = this
+
+        if (this.show_spinner === true) {
+          return
+        }
 
         this.show_spinner = true
 

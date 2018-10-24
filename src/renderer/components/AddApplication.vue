@@ -1,48 +1,58 @@
 <template>
-  <div class="row col-12">
-    <div class="col-8">
-      <h1 class="h2">Applications</h1>
-    </div>
-    <div class="col text-right">
-      <router-link class="btn btn-sm btn-outline-success" to="/add-application">Add new application</router-link>
-      <!-- <button class="btn btn-sm btn-outline-success" data-toggle="modal" data-target="#existingAppModal">Add existing application</button> -->
-    </div>
+  <div class="col-12">
+    <h1 class="h2">Add application</h1>
+		<form class="form">
+			<div class="form-group">
+				<label>Application name</label>
+				<input type="text" class="form-control" placeholder="Enter app name" v-model="application.name">
+				<small id="emailHelp" class="form-text text-muted">A folder will be created with this application name</small>
+			</div>
 
-    <!-- Applications -->
-    <table class="table table-striped table-hover">
-      <thead>
-        <tr>
-          <td>
-            Application Name
-          </td>
-          <td>
-            Containers
-          </td>
-          <td>
-            Rnning containers
-          </td>
-          <td>
-            Commands
-          </td>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="application in applications">
-          <td>
-            {{application.name}}
-          </td>
-          <td>
-            4
-          </td>
-          <td>
-            4/5
-          </td>
-          <td>
-            <button class="btn btn-primary btn-sm" v-on:click="runCommandFromApplication(application)">Run command</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+			<div class="form-group">
+				<button v-on:click="setDirectory($event)" class="btn btn-primary">Select directory</button>
+				<small v-if="application.directory">{{application.directory[0]}}</small>
+			</div>
+			
+			<div class="input-group mb-3">
+				<div class="input-group-prepend">
+					<label class="input-group-text" for="inputGroupSelect01">Laravel version</label>
+				</div>
+				<select class="custom-select" v-model="application.laravel_version">
+					<option selected>Choose...</option>
+					<option value="5.7">5.7</option>
+					<option value="5.6">5.6</option>
+					<option value="5.5">5.5</option>
+				</select>
+			</div>
+
+			<p>
+				Install MySQL?
+			</p>
+			<div class="btn-group btn-group-toggle" data-toggle="buttons">
+				<label class="btn btn-secondary" v-on:click="updateForm('install_mysql', false)">
+					<input type="radio" /> No
+				</label>
+				<label class="btn btn-secondary" v-on:click="updateForm('install_mysql', true)">
+					<input type="radio" /> Yes
+				</label>
+			</div>
+			<p>
+				Install Redis?
+			</p>
+			<div class="btn-group btn-group-toggle" data-toggle="buttons">
+				<label class="btn btn-secondary" v-on:click="updateForm('install_redis', false)">
+					<input type="radio" /> No
+				</label>
+				<label class="btn btn-secondary" v-on:click="updateForm('install_redis', true)">
+					<input type="radio" /> Yes
+				</label>
+			</div>
+			<hr>
+			<button class="btn btn-block btn-primary" v-on:click="createApplication()">
+				<span v-if="!show_spinner">Create application</span>
+				<i v-else class="fa fa-spinner fa-spin" style="font-size:24px"></i>
+			</button>
+		</form>
   </div>
 </template>
 
@@ -52,10 +62,10 @@
   const fs = require('fs')
   const {dialog} = require('electron').remote
   const path = require('path')
-  const sqlite3 = require('sqlite3')
-  const os = require('os')
-  const db = new sqlite3.Database(path.join(os.homedir(), '.kombo', 'kombo'))
-  const yamlToJson = require('js-yaml')
+  // const sqlite3 = require('sqlite3')
+  // const os = require('os')
+  // const db = new sqlite3.Database(path.join(os.homedir(), '.kombo', 'kombo'))
+  // const yamlToJson = require('js-yaml')
 
   export default {
     name: 'landing-page',
@@ -81,14 +91,6 @@
         appDir: '',
         applications: []
       }
-    },
-    created () {
-      let self = this
-
-      db.each('SELECT * from applications', function (err, app) {
-        if (err) console.log(err)
-        self.applications.push(app)
-      })
     },
     methods: {
       updateForm (formItem, value) {
@@ -295,16 +297,6 @@
       setUpCiFolder () {
         fs.mkdirSync(this.appDir + '/ci')
         fs.mkdirSync(this.appDir + '/ci/docker')
-      },
-      /**
-       * Add an existing application
-       */
-      existingApplication () {
-        db.run('INSERT INTO applications VALUES (?, ?)', [this.application.name, this.application.directory[0]])
-      },
-      runCommandFromApplication (application) {
-        let dockerCompose = yamlToJson.safeLoad(fs.readFileSync(path.join(application.path, '/docker-compose.yaml'), 'utf8'))
-        console.log(dockerCompose)
       }
     }
   }

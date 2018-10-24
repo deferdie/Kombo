@@ -11,6 +11,16 @@ export default new Router({
       component: require('@/components/LandingPage').default
     },
     {
+      path: '/add-application',
+      name: 'add-application',
+      component: require('@/components/AddApplication').default
+    },
+    {
+      path: '/add-existing-application',
+      name: 'add-existing-application',
+      component: require('@/components/AddExistingApplication').default
+    },
+    {
       path: '*',
       redirect: '/'
     }
